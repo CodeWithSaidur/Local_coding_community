@@ -24,8 +24,7 @@ export default function Header({ isPro }: HeaderProps) {
         <div className="flex items-center gap-8">
           <Link
             href="/"
-            className="text-xl font-bold tracking-tight hover:opacity-80"
-          >
+            className="text-xl font-bold tracking-tight hover:opacity-80">
             👽
           </Link>
 
@@ -59,12 +58,18 @@ export default function Header({ isPro }: HeaderProps) {
 
           <SignedOut>
             <div className="flex items-center gap-2">
-              <SignInButton>
-                <Button variant="ghost">Sign in</Button>
-              </SignInButton>
-              <SignUpButton>
-                <Button>Sign up</Button>
-              </SignUpButton>
+              <Link
+                href="/sign-in"
+                className="bg-amber-500 caret-lime-400 border-2 rounded-2xl m-3 p-3 hover:cursor-pointer">
+                Sign in
+              </Link>
+              {/* <SignInButton></SignInButton> */}
+              <Link
+                href="/sign-up"
+                className="bg-amber-500 caret-lime-400 border-2 rounded-2xl m-3 p-3 hover:cursor-pointer">
+                Sign up
+              </Link>
+              {/* <SignUpButton></SignUpButton> */}
             </div>
           </SignedOut>
         </div>
