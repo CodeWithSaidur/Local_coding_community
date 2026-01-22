@@ -2,29 +2,29 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useSignUp } from '@clerk/nextjs'
+import { useSignIn } from '@clerk/nextjs'
 import Link from 'next/link'
 import { Loader2 } from 'lucide-react'
 
-export default function SignUpPage() {
-  const { isLoaded, signUp, setActive } = useSignUp()
+export default function ForgotPasswordPage() {
+  const { isLoaded, signIn } = useSignIn()
   const router = useRouter()
 
   const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
   const [code, setCode] = useState('')
-  const [step, setStep] = useState<'form' | 'verify'>('form')
+  const [newPassword, setNewPassword] = useState('')
+  const [step, setStep] = useState<'request' | 'verify'>('request')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   if (!isLoaded) return null
 
   // -------------------------
-  // Create account
+  // Step 1: Send reset code
   // -------------------------
-  const handleSignUp = async () => {
-    if (!email || !password) {
-      setError('Email and password are required')
+  const handleSendCode = async () => {
+    if (!email) {
+      setError('Email is required')
       return
     }
 
@@ -32,29 +32,25 @@ export default function SignUpPage() {
     setError(null)
 
     try {
-      await signUp.create({
-        emailAddress: email,
-        password
-      })
-
-      await signUp.prepareEmailAddressVerification({
-        strategy: 'email_code'
+      await signIn.create({
+        strategy: 'reset_password_email_code',
+        identifier: email
       })
 
       setStep('verify')
     } catch (err: any) {
-      setError(err?.errors?.[0]?.message ?? 'Sign up failed')
+      setError(err?.errors?.[0]?.message ?? 'Failed to send reset code')
     } finally {
       setLoading(false)
     }
   }
 
   // -------------------------
-  // Verify email
+  // Step 2: Verify + reset
   // -------------------------
-  const handleVerify = async () => {
-    if (code.length !== 6) {
-      setError('Enter a valid 6-digit code')
+  const handleResetPassword = async () => {
+    if (!code || !newPassword) {
+      setError('Verification code and new password are required')
       return
     }
 
@@ -62,16 +58,20 @@ export default function SignUpPage() {
     setError(null)
 
     try {
-      const result = await signUp.attemptEmailAddressVerification({ code })
+      const result = await signIn.attemptFirstFactor({
+        strategy: 'reset_password_email_code',
+        code,
+        password: newPassword
+      })
 
       if (result.status === 'complete') {
-        await setActive({ session: result.createdSessionId })
-        router.replace('/')
+        router.replace('/sign-in')
       }
     } catch (err: any) {
       setError(err?.errors?.[0]?.message ?? 'Invalid verification code')
     } finally {
       setLoading(false)
+      
     }
   }
 
@@ -79,7 +79,7 @@ export default function SignUpPage() {
     <div className="flex min-h-screen items-center justify-center bg-amber-100 px-4">
       <div className="w-full max-w-md rounded-xl bg-amber-800 p-6 shadow-lg">
         <h1 className="mb-4 text-center text-2xl font-bold text-white">
-          Create Account
+          Reset password
         </h1>
 
         {error && (
@@ -88,71 +88,69 @@ export default function SignUpPage() {
           </p>
         )}
 
-        {step === 'form' ? (
+        {step === 'request' ? (
           <>
             <input
               type="email"
-              placeholder="Email"
-              className="mb-3 w-full rounded border p-2"
+              placeholder="Enter your email"
+              className="mb-4 w-full rounded border p-2"
               value={email}
               onChange={e => setEmail(e.target.value)}
               disabled={loading}
             />
 
-            <input
-              type="password"
-              placeholder="Password"
-              className="mb-4 w-full rounded border p-2"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              disabled={loading}
-            />
-
-            {/* Smart CAPTCHA (required for production security) */}
+            {/* Smart CAPTCHA */}
             <div id="clerk-captcha" className="mb-4" />
 
             <button
-              onClick={handleSignUp}
+              onClick={handleSendCode}
               disabled={loading}
               className="flex w-full items-center justify-center gap-2 rounded bg-black p-2 text-amber-600 disabled:opacity-50"
             >
               {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-              Create account
+              Send reset code
             </button>
-
-            <p className="mt-3 flex justify-between text-sm text-gray-300">
-              <span>Already have an account?</span>
-              <Link href="/sign-in" className="underline text-blue-400">
-                Sign in
-              </Link>
-              <Link href="/forgot-password" className="underline text-blue-400">
-                Forget Password
-              </Link>
-            </p>
           </>
         ) : (
           <>
             <input
               type="text"
               placeholder="Verification code"
-              className="mb-4 w-full rounded border p-2"
+              className="mb-3 w-full rounded border p-2"
               value={code}
               onChange={e => setCode(e.target.value)}
               disabled={loading}
             />
 
+            <input
+              type="password"
+              placeholder="New password"
+              className="mb-4 w-full rounded border p-2"
+              value={newPassword}
+              onChange={e => setNewPassword(e.target.value)}
+              disabled={loading}
+            />
+
+            {/* Smart CAPTCHA */}
             <div id="clerk-captcha" className="mb-4" />
 
             <button
-              onClick={handleVerify}
+              onClick={handleResetPassword}
               disabled={loading}
-              className="flex w-full items-center justify-center gap-2 rounded bg-green-600 p-2 text-white disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-2 rounded bg-green-600 p-2 text-amber-200 disabled:opacity-50"
             >
               {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-              Verify email
+              Reset password
             </button>
           </>
         )}
+
+        <p className="mt-4 text-center text-sm text-gray-200">
+          Remembered your password?{' '}
+          <Link href="/sign-in" className="underline">
+            Sign in
+          </Link>
+        </p>
       </div>
     </div>
   )
