@@ -54,7 +54,7 @@ export default function SignInPage() {
       }
 
       if (result.status === 'needs_second_factor') {
-        router.push('/mfa-verify')
+        router.push('/')
         return
       }
 
