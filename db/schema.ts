@@ -172,3 +172,6 @@ export const conversationSummariesRelations = relations(
     }),
   })
 );
+
+
+// 1. npx drizzle-kit push
