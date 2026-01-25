@@ -1,4 +1,3 @@
-import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import './globals.css'
 import { ClerkProvider } from '@clerk/nextjs'
@@ -16,11 +15,6 @@ const geistMono = Geist_Mono({
   subsets: ['latin']
 })
 
-export const metadata: Metadata = {
-  title: 'learning-platform',
-  description: 'learning-platform by Code With Saidur'
-}
-
 export default function RootLayout({
   children
 }: Readonly<{
@@ -31,6 +25,7 @@ export default function RootLayout({
       <BackgroundGradient>
         <html lang="en">
           <body
+            suppressHydrationWarning
             className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
             <QueryProvider>
               <Headerwraper />

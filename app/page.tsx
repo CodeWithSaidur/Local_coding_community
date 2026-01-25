@@ -12,7 +12,7 @@ const baseTransition = {
 
 export default function Home() {
   return (
-    <div className="relative min-h-screen">
+    <div className="relative min-h-screen" suppressHydrationWarning>
       <MotionWrapper
         initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}>
