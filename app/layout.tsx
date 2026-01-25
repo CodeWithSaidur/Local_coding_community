@@ -5,6 +5,7 @@ import { ClerkProvider } from '@clerk/nextjs'
 import Headerwraper from '@/components/layout/header-wrapper'
 import Footer from '@/components/layout/footer'
 import BackgroundGradient from '@/components/landing/background-gradient'
+import { QueryProvider } from '@/components/provider'
 const geistSans = Geist({
   variable: '--font-geist-sans',
   subsets: ['latin']
@@ -31,9 +32,11 @@ export default function RootLayout({
         <html lang="en">
           <body
             className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-            <Headerwraper />
-            {children}
-            <Footer />
+            <QueryProvider>
+              <Headerwraper />
+              {children}
+              <Footer />
+            </QueryProvider>
           </body>
         </html>
       </BackgroundGradient>
