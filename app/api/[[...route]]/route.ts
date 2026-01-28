@@ -4,6 +4,7 @@ import { auth } from '@clerk/nextjs/server'
 import { Hono } from 'hono'
 import { HTTPException } from 'hono/http-exception'
 import { eq } from 'drizzle-orm'
+import { communitiesApp } from '../server/community-riutes'
 
 type Variables = {
   usdrId: string
@@ -33,10 +34,7 @@ app.get('/*', async (c, next) => {
   return await next()
 })
 
-app.get('/communities/all', async c => {
-  const allCommu = await db.select().from(communities)
-  return c.json(allCommu)
-})
+const routes = app.route('/communities', communitiesApp)
 
 app.post('/communities/:communityId/join', async c => {
   const clerkId = c.get('usdrId') as string
@@ -65,7 +63,7 @@ app.post('/communities/:communityId/join', async c => {
   return c.json({ message: 'Joined community successfully' }, 201)
 })
 
-export const dynamic = 'force-dynamic' // Ensure Node.js runtime for Drizzle
+export type AppType = typeof routes
 export const GET = app.fetch
 export const POST = app.fetch
 export const PUT = app.fetch
