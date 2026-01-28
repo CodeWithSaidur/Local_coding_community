@@ -23,7 +23,7 @@ export default function RootLayout({
   return (
     <ClerkProvider>
       <BackgroundGradient>
-        <html lang="en">
+        <html lang="en" style={{filter: "brightness(40%);"}}>
           <body
             suppressHydrationWarning
             className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
