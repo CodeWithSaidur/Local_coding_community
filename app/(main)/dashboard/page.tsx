@@ -10,10 +10,21 @@ import {
 import { client } from '@/lib/api-client'
 import { useUser } from '@clerk/nextjs'
 import { useQuery } from '@tanstack/react-query'
-import { Group, MessageCircle, User2Icon, UserIcon } from 'lucide-react'
+import { Group, MessageCircle, User2Icon, UserIcon, ArrowRight } from 'lucide-react'
 import Link from 'next/link'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 
-const COMMUNITIES_QUERY_KEY = ['communities'] as const
+// Helper to get initials
+function getInitials(name: string) {
+  if (!name) return 'U';
+  return name
+    .split(' ')
+    .filter(Boolean)
+    .map((n) => n[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2) || name[0]?.toUpperCase() || 'U';
+}
 
 // Matches your API response shape
 interface Community {
@@ -26,104 +37,232 @@ interface Community {
   updatedAt: string
 }
 
+interface DashboardStats {
+  communities: number
+  activeMatches: number
+}
+
+interface RecentChat {
+  matchId: string
+  otherUser: {
+    id: string
+    name: string
+    imageUrl: string | null
+  }
+  communityName: string
+  lastMessage: string
+  lastMessageAt: string | null
+}
+
 export default function Dashboard() {
   const { user } = useUser()
 
-  const { data, isLoading, error } = useQuery<Community[]>({
-    queryKey: COMMUNITIES_QUERY_KEY,
-    queryFn: async (): Promise<Community[]> => {
-      const res = await client.api.communities.all.$get()
-      if (!res.ok) {
-        throw new Error('Failed to fetch communities')
-      }
-      return res.json() as Promise<Community[]>
+  // 1. Fetch Communities (using the new correct endpoint)
+  const { data: communitiesData, isLoading: communitiesLoading } = useQuery<Community[]>({
+    queryKey: ['user-communities'],
+    queryFn: async () => {
+      const res = await client.api.communities.$get()
+      if (!res.ok) throw new Error('Failed to fetch communities')
+      return res.json() as unknown as Promise<Community[]>
     }
   })
 
-  if (isLoading)
-    return <div className="text-center p-8">Loading communities...</div>
+  // 2. Fetch Dashboard Stats
+  const { data: stats, isLoading: statsLoading } = useQuery<DashboardStats>({
+    queryKey: ['dashboard-stats'],
+    queryFn: async () => {
+      const res = await client.api.dashboard.stats.$get()
+      if (!res.ok) throw new Error('Failed to fetch stats')
+      return res.json() as unknown as Promise<DashboardStats>
+    }
+  })
 
-  if (error)
+  // 3. Fetch Recent Chats
+  const { data: recentChats, isLoading: chatsLoading } = useQuery<RecentChat[]>({
+    queryKey: ['recent-chats'],
+    queryFn: async () => {
+      const res = await client.api.dashboard.recent.$get()
+      if (!res.ok) throw new Error('Failed to fetch recent chats')
+      return res.json() as unknown as Promise<RecentChat[]>
+    }
+  })
+
+  const isLoading = communitiesLoading || statsLoading || chatsLoading
+
+  if (isLoading)
     return (
-      <div className="text-center p-8 text-red-500">
-        Error: {(error as Error).message}
+      <div className="flex h-screen items-center justify-center">
+        <div className="text-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading your dashboard...</p>
+        </div>
       </div>
     )
 
   return (
-    <div className="page-wrapper p-8 max-w-4xl mx-auto">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight mb-4">Dashboard</h1>
-        <p className="text-muted-foreground mb-8">
-          Welcome back {user?.firstName || 'User'}
-        </p>
+    <div className="page-wrapper p-8 max-w-5xl mx-auto space-y-8">
+      {/* Header Section */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">
+            Welcome back, {user?.firstName || 'Learner'}! 👋
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Here's what's happening in your learning journey.
+          </p>
+        </div>
+        <Link href="/communities">
+          <Button>Explore Communities</Button>
+        </Link>
+      </div>
 
-        {/* Recent Chat Card - Fixed incomplete structure */}
+      {/* Stats Overview */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center">
-                <MessageCircle className="size-5 mr-2 text-primary" />
-                Recent Chat
-              </CardTitle>
-              <Link href="/communities">
-                <Button>
-                  <UserIcon className="size-4 mr-2" />
-                  View All
-                </Button>
-              </Link>
-            </div>
-            <CardDescription>Communities you're part of</CardDescription>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Joined Communities</CardTitle>
+            <Group className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            {/* Add recent chat content here */}
-            <p className="text-sm text-muted-foreground">No recent activity</p>
+            <div className="text-2xl font-bold">{stats?.communities || 0}</div>
           </CardContent>
         </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Active Matches</CardTitle>
+            <User2Icon className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats?.activeMatches || 0}</div>
+          </CardContent>
+        </Card>
+        {/* Placeholders for future stats */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Learning Goals</CardTitle>
+            <div className="h-4 w-4 text-muted-foreground">🎯</div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">-</div>
+            <p className="text-xs text-muted-foreground">Coming soon</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Streak</CardTitle>
+            <div className="h-4 w-4 text-muted-foreground">🔥</div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">1 Day</div>
+          </CardContent>
+        </Card>
+      </div>
 
-        {/* Communities Card - Fixed map syntax and added key/proper JSX return */}
-        <Card className="mt-6">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center">
-                <Group className="size-5 mr-2 text-primary" />
-                Communities
-              </CardTitle>
-              <Link href="/communities">
-                <Button variant="outline">
-                  <User2Icon className="size-4 mr-2" />
-                  Manage
-                </Button>
-              </Link>
-            </div>
-            <CardDescription>Communities you're part of</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {data?.map(c => (
-                <Link href={`/communities${c.id}`} key={c.id}>
-                  <Card className="p-4 m-4">
-                    <CardTitle className="font-medium text-lg mb-1">
-                      {c.name}
-                    </CardTitle>
-                    {c.description && (
-                      <CardDescription className="text-sm">
-                        {c.description}
-                      </CardDescription>
-                    )}
-                    <p className="text-xs text-muted-foreground mt-2">
-                      Created: {new Date(c.createdAt).toLocaleDateString()}
-                    </p>
-                  </Card>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        {/* Recent Chats Column (2/3 width) */}
+        <div className="lg:col-span-2 space-y-6">
+          <Card className="h-full">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <MessageCircle className="size-5 text-primary" />
+                  Recent Conversations
+                </CardTitle>
+              </div>
+              <CardDescription>Pick up where you left off</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {recentChats && recentChats.length > 0 ? (
+                  recentChats.map((chat) => (
+                    <Link href={`/chat/${chat.matchId}`} key={chat.matchId} className="flex items-center gap-4 p-3 rounded-lg hover:bg-muted/50 transition-colors border border-transparent hover:border-border">
+                      <Avatar className="h-10 w-10">
+                        <AvatarImage src={chat.otherUser.imageUrl || ''} />
+                        <AvatarFallback>{getInitials(chat.otherUser.name || 'User')}</AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 overflow-hidden">
+                        <div className="flex justify-between items-center mb-1">
+                          <h4 className="font-medium truncate">{chat.otherUser.name}</h4>
+                          {chat.lastMessageAt && (
+                            <span className="text-xs text-muted-foreground">
+                              {new Date(chat.lastMessageAt).toLocaleDateString()}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground truncate">
+                          {chat.lastMessage}
+                        </p>
+                        <div className="flex items-center gap-1 mt-1">
+                          <span className="text-[10px] bg-secondary px-1.5 py-0.5 rounded text-secondary-foreground font-medium">
+                            {chat.communityName}
+                          </span>
+                        </div>
+                      </div>
+                      <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                    </Link>
+                  ))
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <p>No recent conversations.</p>
+                    <Link href="/communities">
+                      <Button variant="link" className="mt-2 text-primary">Find a partner &rarr;</Button>
+                    </Link>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Communities Sidebar (1/3 width) */}
+        <div className="space-y-6">
+          <Card className="h-full">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <Group className="size-5 text-primary" />
+                  Your Communities
+                </CardTitle>
+                <Link href="/communities">
+                  <Button variant="ghost" size="sm" className="h-8">View All</Button>
                 </Link>
-              )) || (
-                <p className="text-sm text-muted-foreground">
-                  No communities yet.
-                </p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+              </div>
+              <CardDescription>Communities you have joined</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {communitiesData?.map(c => (
+                  <Link href={`/communities/${c.id}`} key={c.id}>
+                    <div className="group flex items-start gap-3 p-3 rounded-md hover:bg-muted/50 transition-colors">
+                      <div className="h-10 w-10 rounded-md bg-muted flex items-center justify-center overflow-hidden shrink-0">
+                        {c.imageUrl ? (
+                          <img src={c.imageUrl} alt={c.name} className="h-full w-full object-cover" />
+                        ) : (
+                          <Group className="h-5 w-5 text-muted-foreground" />
+                        )}
+                      </div>
+                      <div>
+                        <h4 className="font-medium text-sm group-hover:text-primary transition-colors">{c.name}</h4>
+                        {c.description && (
+                          <p className="text-xs text-muted-foreground line-clamp-1">
+                            {c.description}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </Link>
+                )) || (
+                    <div className="text-center py-6 text-muted-foreground text-sm">
+                      <p>You haven't joined any communities yet.</p>
+                    </div>
+                  )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
       </div>
     </div>
   )

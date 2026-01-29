@@ -1,13 +1,17 @@
 import { db } from '@/db'
-import { communities, communityMembers } from '@/db/schema'
-import { auth } from '@clerk/nextjs/server'
+import { communities, communityMembers, users } from '@/db/schema'
+import { auth, currentUser } from '@clerk/nextjs/server'
 import { Hono } from 'hono'
 import { HTTPException } from 'hono/http-exception'
 import { eq } from 'drizzle-orm'
-import { communitiesApp } from '../server/community-riutes'
+import { communitiesApp } from '../server/community-routes'
+import { dashboardApp } from '../server/dashboard-routes'
+import { chatApp } from '../server/chat-routes'
+import { adminApp } from '../server/admin-routes'
 
 type Variables = {
-  usdrId: string
+  userId: string
+  role?: string
 }
 
 const app = new Hono<{ Variables: Variables }>().basePath('/api')
@@ -17,53 +21,64 @@ app.onError((err, c) => {
   return c.json({ err: 'Internal Server Error' }, 500)
 })
 
-// Middleware (your existing one - fixed path check if needed)
-app.get('/*', async (c, next) => {
-  const publicRoute = ['/api/communities/all']
-  if (publicRoute.includes(c.req.path)) {
+// Middleware
+app.use('/*', async (c, next) => {
+  const publicRoutes = ['/api/communities/all']
+  if (publicRoutes.includes(c.req.path)) {
     return next()
   }
 
   // prevent unauth user to access communities
-  const session = await auth()
-  if (!session?.userId) {
+  const { userId, sessionClaims } = await auth()
+  if (!userId) {
     throw new HTTPException(401, { message: 'Unauthorized' })
   }
 
-  c.set('usdrId', session.userId)
+  // Get or Create DB User
+  let [user] = await db.select().from(users).where(eq(users.clerkId, userId)).limit(1)
+
+  if (!user) {
+    const clerkUser = await currentUser()
+    if (!clerkUser) {
+      console.error(`[API Middleware] Clerk user not found for ID: ${userId}`)
+      throw new HTTPException(404, { message: 'User not found in Clerk' })
+    }
+
+    [user] = await db.insert(users).values({
+      clerkId: clerkUser.id,
+      email: clerkUser.emailAddresses[0].emailAddress,
+      name: `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim() || 'Learner',
+      imageUrl: clerkUser.imageUrl
+    }).returning()
+    console.log(`[API Middleware] Created new DB user ${user.id} for email ${user.email}`)
+  }
+
+  // Extract role from session claims
+  let role = (sessionClaims?.metadata as any)?.role ||
+    (sessionClaims?.publicMetadata as any)?.role ||
+    (sessionClaims as any)?.role ||
+    null
+
+  // Fallback: If the email is the designated admin email, grant admin role
+  if (!role && user?.email?.toLowerCase() === 'sabedbarbhuiya3@gmail.com') {
+    role = 'admin'
+    console.log(`[API Middleware] Granted internal 'admin' role based on email: ${user.email}`)
+  }
+
+  console.log(`[API Middleware] Processing ${c.req.method} ${c.req.path} for Clerk user ${userId} | Email: ${user?.email} | Role: ${role}`)
+  c.set('userId', user.id)
+  c.set('role', role)
   return await next()
 })
 
-const routes = app.route('/communities', communitiesApp)
-
-app.post('/communities/:communityId/join', async c => {
-  const clerkId = c.get('usdrId') as string
-  const communityId = c.req.param('communityId')
-
-  // Fetch community (fix: destructure result, add .limit(1))
-  const [community] = await db
-    .select()
-    .from(communities)
-    .where(eq(communities.id, communityId))
-    .limit(1)
-
-  if (!community) {
-    throw new HTTPException(404, { message: 'Community Not Found' })
-  }
-
-  // Insert membership (handles duplicates via unique constraint or check)
-  await db
-    .insert(communityMembers)
-    .values({
-      userId: clerkId,
-      communityId
-    })
-    .onConflictDoNothing() // Optional: prevents duplicate errors
-
-  return c.json({ message: 'Joined community successfully' }, 201)
-})
+const routes = app
+  .route('/communities', communitiesApp)
+  .route('/dashboard', dashboardApp)
+  .route('/chat', chatApp)
+  .route('/admin', adminApp)
 
 export type AppType = typeof routes
+
 export const GET = app.fetch
 export const POST = app.fetch
 export const PUT = app.fetch

@@ -3,12 +3,13 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { useSignUp } from '@clerk/nextjs'
+import { useSignUp, useClerk } from '@clerk/nextjs'
 import Link from 'next/link'
 import { Loader2, ArrowLeft, Eye, EyeOff } from 'lucide-react'
 
 export default function SignUpPage() {
   const { isLoaded, signUp, setActive } = useSignUp()
+  const { user, loaded: isUserLoaded, signOut } = useClerk()
   const router = useRouter()
 
   const [email, setEmail] = useState('')
@@ -19,6 +20,22 @@ export default function SignUpPage() {
   const [error, setError] = useState<string | null>(null)
   const [showPassword, setShowPassword] = useState(false)
   const [codeTimer, setCodeTimer] = useState(60)
+
+  // Auto-logout if user is already session-active but hits sign-up
+  // We only do this once on mount to prevent logging out a newly signed-in user
+  const [hasCheckedSession, setHasCheckedSession] = useState(false)
+
+  useEffect(() => {
+    if (isUserLoaded && user && !hasCheckedSession) {
+      setHasCheckedSession(true)
+      console.log('Active session detected on mount. Logging out to allow new account creation...')
+      signOut().then(() => {
+        router.refresh()
+      })
+    } else if (isUserLoaded && !user) {
+      setHasCheckedSession(true)
+    }
+  }, [isUserLoaded, !!user, signOut, router, hasCheckedSession])
 
   // Reset form when returning to sign up
   useEffect(() => {
@@ -39,7 +56,7 @@ export default function SignUpPage() {
     return () => clearInterval(interval)
   }, [step, codeTimer])
 
-  if (!isLoaded) {
+  if (!isLoaded || !isUserLoaded || (isUserLoaded && user && !hasCheckedSession)) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-amber-600" />
@@ -120,7 +137,7 @@ export default function SignUpPage() {
 
       if (result.status === 'complete') {
         await setActive({ session: result.createdSessionId })
-        router.replace('/')
+        router.replace('/dashboard')
       } else {
         setError('Verification incomplete. Please try again.')
       }

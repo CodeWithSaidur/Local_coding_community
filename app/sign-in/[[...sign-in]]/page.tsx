@@ -1,13 +1,14 @@
 'use client'
 
-import { useState } from 'react'
-import { useSignIn } from '@clerk/nextjs'
+import { useState, useEffect } from 'react'
+import { useSignIn, useClerk } from '@clerk/nextjs'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Loader2, Eye, EyeOff } from 'lucide-react'
 
 export default function SignInPage() {
   const { isLoaded, signIn, setActive } = useSignIn()
+  const { user, signOut, loaded: isUserLoaded } = useClerk()
   const router = useRouter()
 
   const [email, setEmail] = useState('')
@@ -16,7 +17,23 @@ export default function SignInPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  if (!isLoaded) {
+  // Auto-logout if user is already session-active but hits sign-in
+  // We only do this once on mount to prevent logging out a newly signed-in user
+  const [hasCheckedSession, setHasCheckedSession] = useState(false)
+
+  useEffect(() => {
+    if (isUserLoaded && user && !hasCheckedSession) {
+      setHasCheckedSession(true)
+      console.log('Active session detected on mount. Logging out to allow re-authentication...')
+      signOut().then(() => {
+        router.refresh()
+      })
+    } else if (isUserLoaded && !user) {
+      setHasCheckedSession(true)
+    }
+  }, [isUserLoaded, !!user, signOut, router, hasCheckedSession])
+
+  if (!isLoaded || !isUserLoaded || (isUserLoaded && user && !hasCheckedSession)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-amber-50 to-orange-100">
         <Loader2 className="h-8 w-8 animate-spin text-amber-600" />
@@ -49,7 +66,7 @@ export default function SignInPage() {
 
       if (result.status === 'complete') {
         await setActive({ session: result.createdSessionId })
-        router.replace('/')
+        router.replace('/dashboard')
         return
       }
 
@@ -86,7 +103,7 @@ export default function SignInPage() {
         default:
           setError(
             firstError?.message ??
-              'Sign in failed. Please check your credentials.'
+            'Sign in failed. Please check your credentials.'
           )
       }
     } finally {

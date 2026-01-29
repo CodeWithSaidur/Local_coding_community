@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm";
-import { jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { jsonb, pgTable, text, timestamp, uuid, uniqueIndex } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -61,6 +61,10 @@ export const matches = pgTable("matches", {
     .notNull(),
   status: text("status").default("pending").notNull(), // pending, accepted, declined
   createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => {
+  return {
+    uniqueMatch: uniqueIndex("unique_match_idx").on(table.user1Id, table.user2Id, table.communityId),
+  }
 });
 
 export const conversations = pgTable("conversations", {

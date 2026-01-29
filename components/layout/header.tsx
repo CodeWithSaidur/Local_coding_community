@@ -1,10 +1,12 @@
 'use client'
+import { useState, useEffect } from 'react'
 
 import Link from 'next/link'
 import {
   SignedIn,
   SignedOut,
-  UserButton
+  UserButton,
+  useUser
 } from '@clerk/nextjs'
 import { Trophy } from 'lucide-react'
 
@@ -16,6 +18,11 @@ type HeaderProps = {
 }
 
 export default function Header({ isPro }: HeaderProps) {
+  const { user } = useUser()
+  const isAdminRole = (user?.publicMetadata as any)?.role?.toLowerCase() === 'admin'
+  const isAdminEmail = user?.primaryEmailAddress?.emailAddress?.toLowerCase() === 'sabedbarbhuiya3@gmail.com'
+  const isAdmin = isAdminRole || isAdminEmail
+
   return (
     <header className="sticky top-0 z-50 border-b bg-background/70 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4">
@@ -43,6 +50,11 @@ export default function Header({ isPro }: HeaderProps) {
               <Link href="/chat" className="hover:text-primary">
                 Chat
               </Link>
+              {isAdmin && (
+                <Link href="/admin" className="text-primary font-bold">
+                  Admin
+                </Link>
+              )}
             </nav>
           </SignedIn>
         </div>

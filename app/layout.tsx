@@ -5,6 +5,7 @@ import Headerwraper from '@/components/layout/header-wrapper'
 import Footer from '@/components/layout/footer'
 import BackgroundGradient from '@/components/landing/background-gradient'
 import { QueryProvider } from '@/components/provider'
+
 const geistSans = Geist({
   variable: '--font-geist-sans',
   subsets: ['latin']
@@ -22,19 +23,24 @@ export default function RootLayout({
 }>) {
   return (
     <ClerkProvider>
-      <BackgroundGradient>
-        <html lang="en" style={{filter: "brightness(40%);"}}>
-          <body
-            suppressHydrationWarning
-            className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-            <QueryProvider>
-              <Headerwraper />
-              {children}
-              <Footer />
-            </QueryProvider>
-          </body>
-        </html>
-      </BackgroundGradient>
+      <html lang="en">
+        <body
+          suppressHydrationWarning
+          className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        >
+          <QueryProvider>
+            <BackgroundGradient>
+              <div className="flex flex-col min-h-screen">
+                <Headerwraper />
+                <main className="flex-1">
+                  {children}
+                </main>
+                <Footer />
+              </div>
+            </BackgroundGradient>
+          </QueryProvider>
+        </body>
+      </html>
     </ClerkProvider>
   )
 }
