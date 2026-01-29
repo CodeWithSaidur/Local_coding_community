@@ -18,9 +18,12 @@ export default clerkMiddleware(async (auth, request) => {
     const { userId } = await auth()
     const url = request.nextUrl
 
-    // If user is logged in and trying to access the landing page, redirect to dashboard
-    if (userId && url.pathname === '/') {
-        return NextResponse.redirect(new URL('/dashboard', request.url))
+    // If user is logged in and trying to access public auth routes or landing page, redirect to dashboard
+    if (userId && (isPublicRoute(request) && !request.nextUrl.pathname.startsWith('/api'))) {
+        // We don't want to redirect if it's an API route even if it's public
+        if (url.pathname === '/' || isAuthRoute(request) || url.pathname.startsWith('/forgot-password')) {
+            return NextResponse.redirect(new URL('/dashboard', request.url))
+        }
     }
 
     // Protect all non-public routes

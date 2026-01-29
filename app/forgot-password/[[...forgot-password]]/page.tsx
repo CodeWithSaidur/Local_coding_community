@@ -92,7 +92,7 @@ export default function ForgotPasswordPage() {
         default:
           setError(
             firstError?.message ??
-              'Unable to send reset code. Please try again.'
+            'Unable to send reset code. Please try again.'
           )
       }
     } finally {
@@ -127,7 +127,7 @@ export default function ForgotPasswordPage() {
 
       if (result.status === 'complete') {
         await setActive({ session: result.createdSessionId })
-        router.replace('/')
+        router.replace('/dashboard')
         return
       }
 

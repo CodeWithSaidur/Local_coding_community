@@ -30,11 +30,11 @@ export default function Header({ isPro }: HeaderProps) {
         {/* Left */}
         <div className="flex items-center gap-8">
           <Link
-            href="/"
+            href={user ? "/dashboard" : "/"}
             aria-label="Home"
             className="flex items-center gap-2 text-xl font-bold tracking-tight transition-all hover:scale-105"
           >
-            <span className="text-2xl">👽</span>
+            <span className="text-2xl">🎓</span>
             <span className="hidden sm:inline-block bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
               EduAliens
             </span>
