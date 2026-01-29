@@ -91,7 +91,7 @@ export default function UserProfileDropdown() {
                         initial={{ opacity: 0, scale: 0.95, y: 10, x: -10 }}
                         animate={{ opacity: 1, scale: 1, y: 0, x: 0 }}
                         exit={{ opacity: 0, scale: 0.95, y: 10, x: -10 }}
-                        className="absolute right-0 mt-3 w-72 origin-top-right overflow-hidden rounded-[2rem] bg-white shadow-2xl ring-1 ring-black/5 z-50 p-6"
+                        className="absolute right-0 mt-3 w-72 origin-top-right overflow-hidden rounded-3xl bg-popover text-popover-foreground shadow-2xl ring-1 ring-border/50 z-50 p-6 border backdrop-blur-xl"
                     >
                         <div className="flex flex-col gap-6">
                             <div className="flex items-center gap-4 border-b pb-4">

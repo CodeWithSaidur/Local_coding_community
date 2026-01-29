@@ -12,16 +12,19 @@ export default function BackgroundGradient({
     <div
       className={clsx(
         'relative min-h-screen w-full overflow-hidden',
-        'bg-linear-to-br',
-        'from-[#fef6e2] via-[#faa77d] to-[#e86600]',
+        'bg-background transition-colors duration-500',
         className
       )}
     >
-      {/* Soft blur layer for depth */}
-      <div className="pointer-events-none absolute inset-0 backdrop-blur-[120px]" />
+      {/* Decorative blobs for a modern look */}
+      <div className="absolute top-[-10%] left-[-10%] h-[40%] w-[40%] rounded-full bg-primary/10 blur-[120px] animate-pulse" />
+      <div className="absolute bottom-[-10%] right-[-10%] h-[40%] w-[40%] rounded-full bg-indigo-500/10 blur-[120px] animate-pulse delay-700" />
+
+      {/* Subtle grain effect for texture */}
+      <div className="pointer-events-none absolute inset-0 opacity-[0.03] mix-blend-overlay bg-[url('https://grainy-gradients.vercel.app/noise.svg')]" />
 
       {/* Content */}
-      <div className="relative z-10">{children}</div>
+      <div className="relative z-10 flex flex-col min-h-screen">{children}</div>
     </div>
   )
 }

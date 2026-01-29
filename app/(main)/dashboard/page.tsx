@@ -100,60 +100,66 @@ export default function Dashboard() {
     )
 
   return (
-    <div className="page-wrapper p-8 max-w-5xl mx-auto space-y-8">
+    <div className="page-wrapper p-4 sm:p-8 max-w-7xl mx-auto space-y-8">
       {/* Header Section */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
             Welcome back, {user?.firstName || 'Learner'}! 👋
           </h1>
-          <p className="text-muted-foreground mt-1">
+          <p className="text-muted-foreground mt-1 text-sm sm:text-base">
             Here's what's happening in your learning journey.
           </p>
         </div>
-        <Link href="/communities">
-          <Button>Explore Communities</Button>
+        <Link href="/communities" className="w-full sm:w-auto">
+          <Button className="w-full sm:w-auto shadow-sm transition-all hover:shadow-md active:scale-95">
+            Explore Communities
+          </Button>
         </Link>
       </div>
 
       {/* Stats Overview */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+        <Card className="hover:border-primary/50 transition-all hover:shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Joined Communities</CardTitle>
-            <Group className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-xs sm:text-sm font-semibold uppercase tracking-wider text-muted-foreground">Joined Communities</CardTitle>
+            <Group className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.communities || 0}</div>
+            <div className="text-xl sm:text-2xl font-bold">{stats?.communities || 0}</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="hover:border-primary/50 transition-all hover:shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Matches</CardTitle>
-            <User2Icon className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-xs sm:text-sm font-semibold uppercase tracking-wider text-muted-foreground">Active Matches</CardTitle>
+            <User2Icon className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.activeMatches || 0}</div>
+            <div className="text-xl sm:text-2xl font-bold">{stats?.activeMatches || 0}</div>
           </CardContent>
         </Card>
         {/* Placeholders for future stats */}
-        <Card>
+        <Card className="hover:border-primary/50 transition-all hover:shadow-sm overflow-hidden relative">
+          <div className="absolute top-0 right-0 p-1">
+            <span className="text-[10px] bg-secondary px-1.5 py-0.5 rounded text-secondary-foreground font-bold">SOON</span>
+          </div>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Learning Goals</CardTitle>
-            <div className="h-4 w-4 text-muted-foreground">🎯</div>
+            <CardTitle className="text-xs sm:text-sm font-semibold uppercase tracking-wider text-muted-foreground">Learning Goals</CardTitle>
+            <div className="h-4 w-4 text-primary flex items-center justify-center text-xs">🎯</div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">-</div>
-            <p className="text-xs text-muted-foreground">Coming soon</p>
+            <div className="text-xl sm:text-2xl font-bold">-</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="hover:border-primary/50 transition-all hover:shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Streak</CardTitle>
-            <div className="h-4 w-4 text-muted-foreground">🔥</div>
+            <CardTitle className="text-xs sm:text-sm font-semibold uppercase tracking-wider text-muted-foreground">Streak</CardTitle>
+            <div className="h-4 w-4 text-orange-500 flex items-center justify-center text-xs">🔥</div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">1 Day</div>
+            <div className="text-xl sm:text-2xl font-bold px-3 py-1 bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 rounded-full w-fit">
+              1 Day
+            </div>
           </CardContent>
         </Card>
       </div>
