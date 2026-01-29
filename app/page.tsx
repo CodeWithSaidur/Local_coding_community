@@ -1,3 +1,5 @@
+import { auth } from '@clerk/nextjs/server'
+import { redirect } from 'next/navigation'
 import CtaSec from '@/components/landing/cta-sec'
 import FeaturesSec from '@/components/landing/features-sec'
 import HeroSec from '@/components/landing/hero-sec'
@@ -10,7 +12,13 @@ const baseTransition = {
   ease: [0.22, 1, 0.36, 1] // smooth, premium easing
 }
 
-export default function Home() {
+export default async function Home() {
+  const { userId } = await auth()
+
+  if (userId) {
+    redirect('/dashboard')
+  }
+
   return (
     <div className="relative min-h-screen" suppressHydrationWarning>
       <MotionWrapper

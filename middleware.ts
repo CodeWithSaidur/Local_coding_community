@@ -15,6 +15,14 @@ const isAuthRoute = createRouteMatcher([
 ])
 
 export default clerkMiddleware(async (auth, request) => {
+    const { userId } = await auth()
+    const url = request.nextUrl
+
+    // If user is logged in and trying to access the landing page, redirect to dashboard
+    if (userId && url.pathname === '/') {
+        return NextResponse.redirect(new URL('/dashboard', request.url))
+    }
+
     // Protect all non-public routes
     if (!isPublicRoute(request)) {
         await auth.protect()
