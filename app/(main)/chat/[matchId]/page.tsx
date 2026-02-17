@@ -64,12 +64,12 @@ export default function ChatWindowPage() {
     const [newMessage, setNewMessage] = useState('')
     const bottomRef = useRef<HTMLDivElement>(null)
 
-    const { data: me } = useQuery({
+    const { data: me } = useQuery<{ id: string }>({
         queryKey: ['me'],
         queryFn: async () => {
             const res = await client.api.dashboard.me.$get()
-            if (!res.ok) return null
-            return res.json()
+            if (!res.ok) throw new Error('Failed to fetch user')
+            return res.json() as unknown as Promise<{ id: string }>
         }
     })
 
