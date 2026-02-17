@@ -1,4 +1,5 @@
 import { User } from '@/db/schema'
+import { connectDB } from '@/db'
 import { auth, currentUser } from '@clerk/nextjs/server'
 import { Hono } from 'hono'
 import { HTTPException } from 'hono/http-exception'
@@ -16,11 +17,15 @@ const app = new Hono<{ Variables: Variables }>({ strict: false }).basePath('/api
 
 // Optional: Add a logger to see incoming requests in prod logs
 app.use('*', async (c, next) => {
+  // Ensure DB is connected
+  await connectDB()
+
   const start = Date.now()
   await next()
   const ms = Date.now() - start
   console.log(`[API ${c.req.method}] ${c.req.path} - ${c.res.status} (${ms}ms)`)
 })
+
 
 app.onError((err, c) => {
   console.error(err)
