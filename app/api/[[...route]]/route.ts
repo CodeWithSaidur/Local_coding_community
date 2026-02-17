@@ -1,9 +1,7 @@
-import { db } from '@/db'
-import { communities, communityMembers, users } from '@/db/schema'
+import { User } from '@/db/schema'
 import { auth, currentUser } from '@clerk/nextjs/server'
 import { Hono } from 'hono'
 import { HTTPException } from 'hono/http-exception'
-import { eq } from 'drizzle-orm'
 import { communitiesApp } from '../server/community-routes'
 import { dashboardApp } from '../server/dashboard-routes'
 import { chatApp } from '../server/chat-routes'
@@ -32,8 +30,7 @@ app.onError((err, c) => {
 // Middleware
 app.use('/*', async (c, next) => {
   // Check if the current route is public
-  // Note: in Hono with basePath('/api'), c.req.path starts AFTER /api
-  const internalPath = c.req.path // e.g., "/communities/all"
+  const internalPath = c.req.path
   const publicPaths = ['/communities/all', '/admin/login']
 
   if (publicPaths.includes(internalPath)) {
@@ -47,7 +44,7 @@ app.use('/*', async (c, next) => {
   }
 
   // Get or Create DB User
-  let [user] = await db.select().from(users).where(eq(users.clerkId, userId)).limit(1)
+  let user = await User.findOne({ clerkId: userId })
 
   if (!user) {
     const clerkUser = await currentUser()
@@ -56,13 +53,13 @@ app.use('/*', async (c, next) => {
       throw new HTTPException(404, { message: 'User not found in Clerk' })
     }
 
-    [user] = await db.insert(users).values({
+    user = await User.create({
       clerkId: clerkUser.id,
       email: clerkUser.emailAddresses[0].emailAddress,
       name: `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim() || 'Learner',
       imageUrl: clerkUser.imageUrl
-    }).returning()
-    console.log(`[API Middleware] Created new DB user ${user.id} for email ${user.email}`)
+    })
+    console.log(`[API Middleware] Created new DB user ${user._id} for email ${user.email}`)
   }
 
   // Extract role from session claims
@@ -77,8 +74,8 @@ app.use('/*', async (c, next) => {
     console.log(`[API Middleware] Granted internal 'admin' role based on email: ${user.email}`)
   }
 
-  console.log(`[API Middleware] OK: ${c.req.method} ${c.req.path} | DB User: ${user.id} | Email: ${user.email} | Role: ${role}`)
-  c.set('userId', user.id)
+  console.log(`[API Middleware] OK: ${c.req.method} ${c.req.path} | DB User: ${user._id} | Email: ${user.email} | Role: ${role}`)
+  c.set('userId', user._id.toString())
   c.set('role', role)
   return await next()
 })
@@ -101,3 +98,4 @@ export const GET = app.fetch
 export const POST = app.fetch
 export const PUT = app.fetch
 export const DELETE = app.fetch
+

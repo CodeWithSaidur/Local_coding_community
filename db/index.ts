@@ -1,6 +1,4 @@
-import { drizzle } from 'drizzle-orm/node-postgres'
-import { Pool } from 'pg'
-import * as schema from './schema'
+import mongoose from 'mongoose'
 
 const connectionString = process.env.DATABASE_URL!
 
@@ -8,16 +6,11 @@ if (!connectionString) {
   throw new Error('DB URI Not Defined in .env')
 }
 
-const pool = new Pool({
-  connectionString,
-  ssl: connectionString.includes('sslmode=require')
-    ? {
-        rejectUnauthorized: false
-      }
-    : undefined,
-  max: 10,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 1000
+// Connect to MongoDB
+mongoose.connect(connectionString).catch(err => {
+  console.error('MongoDB connection error:', err)
 })
 
-export const db = drizzle(pool, { schema })
+export const db = mongoose.connection
+export { mongoose }
+

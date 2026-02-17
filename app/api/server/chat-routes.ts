@@ -1,8 +1,5 @@
-import { db } from '@/db'
-import { conversations, matches, messages, users, conversationSummaries } from '@/db/schema'
-import { and, desc, eq, or, sql } from 'drizzle-orm'
+import { User, Match, Conversation, Message, ConversationSummary } from '@/db/schema'
 import { Hono } from 'hono'
-import { generateConversationSummary } from '@/lib/ai/summary-service'
 import { pusherServer } from '@/lib/pusher'
 
 type Variables = {
@@ -15,30 +12,32 @@ const chatApp = new Hono<{ Variables: Variables }>()
     .get('/', async c => {
         const userId = c.get('userId')
 
-        // Find all matches for this user where a conversation might exist
-        // Or simply listing all matches that are 'accepted' (if we had that status logic fully working)
-        // For now, let's list all matches the user is part of.
-        // And ideally join with the latest message if it exists.
+        // Find all matches for this user
+        const userMatches = await Match.find({
+            $or: [{ user1Id: userId }, { user2Id: userId }]
+        })
 
-        const userMatches = await db
-            .select({
-                matchId: matches.id,
-                partnerId: sql<string>`CASE WHEN ${matches.user1Id} = ${userId} THEN ${matches.user2Id} ELSE ${matches.user1Id} END`,
-                partnerName: users.name,
-                partnerImage: users.imageUrl,
-                lastMessage: sql<string>`(SELECT content FROM ${messages} WHERE ${messages.conversationId} = (SELECT id FROM ${conversations} WHERE ${conversations.matchId} = ${matches.id}) ORDER BY ${messages.createdAt} DESC LIMIT 1)`,
-                lastMessageAt: sql<string>`(SELECT created_at FROM ${messages} WHERE ${messages.conversationId} = (SELECT id FROM ${conversations} WHERE ${conversations.matchId} = ${matches.id}) ORDER BY ${messages.createdAt} DESC LIMIT 1)`
-            })
-            .from(matches)
-            .innerJoin(users, or(
-                and(eq(matches.user1Id, userId), eq(users.id, matches.user2Id)),
-                and(eq(matches.user2Id, userId), eq(users.id, matches.user1Id))
-            ))
-            .where(
-                or(eq(matches.user1Id, userId), eq(matches.user2Id, userId))
-            )
+        const enrichedMatches = await Promise.all(userMatches.map(async (matchDoc: any) => {
+            const partnerId = matchDoc.user1Id.toString() === userId ? matchDoc.user2Id : matchDoc.user1Id
+            const partner = await User.findById(partnerId)
 
-        return c.json(userMatches)
+            const conversation = await Conversation.findOne({ matchId: matchDoc._id })
+            let lastMessage = null
+            if (conversation) {
+                lastMessage = await Message.findOne({ conversationId: conversation._id }).sort({ createdAt: -1 })
+            }
+
+            return {
+                matchId: matchDoc._id,
+                partnerId: partner?._id,
+                partnerName: partner?.name,
+                partnerImage: partner?.imageUrl,
+                lastMessage: lastMessage ? lastMessage.content : null,
+                lastMessageAt: lastMessage ? lastMessage.createdAt : null
+            }
+        }))
+
+        return c.json(enrichedMatches)
     })
 
     // 2. Get Messages for a specific Match/Conversation
@@ -47,30 +46,21 @@ const chatApp = new Hono<{ Variables: Variables }>()
         const userId = c.get('userId')
 
         // Ensure conversation record exists for this match
-        let [conversation] = await db
-            .select()
-            .from(conversations)
-            .where(eq(conversations.matchId, matchId))
-            .limit(1)
+        let conversation = await Conversation.findOne({ matchId })
 
         if (!conversation) {
             // Create it if it doesn't exist (lazy creation)
-            // First verify user is part of match
-            const [match] = await db.select().from(matches).where(eq(matches.id, matchId)).limit(1)
-            if (!match || (match.user1Id !== userId && match.user2Id !== userId)) {
+            const match = await Match.findById(matchId)
+            if (!match || (match.user1Id.toString() !== userId && match.user2Id.toString() !== userId)) {
                 return c.json({ error: 'Unauthorized or Match not found' }, 401)
             }
 
-            [conversation] = await db.insert(conversations).values({
+            conversation = await Conversation.create({
                 matchId
-            }).returning()
+            })
         }
 
-        const allMessages = await db
-            .select()
-            .from(messages)
-            .where(eq(messages.conversationId, conversation.id))
-            .orderBy(messages.createdAt)
+        const allMessages = await Message.find({ conversationId: conversation._id }).sort({ createdAt: 1 })
 
         return c.json({ conversation, messages: allMessages })
     })
@@ -83,35 +73,29 @@ const chatApp = new Hono<{ Variables: Variables }>()
 
         if (!content) return c.json({ error: 'Content required' }, 400)
 
-        // Get or create conversation (reuse logic or abstract it)
-        let [conversation] = await db
-            .select()
-            .from(conversations)
-            .where(eq(conversations.matchId, matchId))
-            .limit(1)
+        // Get or create conversation
+        let conversation = await Conversation.findOne({ matchId })
 
         if (!conversation) {
-            const [match] = await db.select().from(matches).where(eq(matches.id, matchId)).limit(1)
-            if (!match || (match.user1Id !== userId && match.user2Id !== userId)) {
+            const match = await Match.findById(matchId)
+            if (!match || (match.user1Id.toString() !== userId && match.user2Id.toString() !== userId)) {
                 return c.json({ error: 'Unauthorized' }, 401)
             }
-            [conversation] = await db.insert(conversations).values({ matchId }).returning()
+            conversation = await Conversation.create({ matchId })
         }
 
-        const [newMessage] = await db.insert(messages).values({
-            conversationId: conversation.id,
+        const newMessage = await Message.create({
+            conversationId: conversation._id,
             senderId: userId,
             content
-        }).returning()
+        })
 
         // Update last message timestamp
-        await db.update(conversations)
-            .set({ lastMessageAt: new Date() })
-            .where(eq(conversations.id, conversation.id))
+        await Conversation.findByIdAndUpdate(conversation._id, { lastMessageAt: new Date() })
 
         // Trigger Pusher event
         try {
-            await pusherServer.trigger(`chat-${conversation.id}`, 'new-message', newMessage)
+            await pusherServer.trigger(`chat-${conversation._id}`, 'new-message', newMessage)
         } catch (e) {
             console.error('Pusher trigger failed:', e)
         }
@@ -125,27 +109,24 @@ const chatApp = new Hono<{ Variables: Variables }>()
         const userId = c.get('userId')
 
         // Verify membership and ownership
-        const [match] = await db.select().from(matches).where(eq(matches.id, matchId)).limit(1)
-        if (!match || (match.user1Id !== userId && match.user2Id !== userId)) {
+        const match = await Match.findById(matchId)
+        if (!match || (match.user1Id.toString() !== userId && match.user2Id.toString() !== userId)) {
             return c.json({ error: 'Unauthorized' }, 401)
         }
 
-        const [conversation] = await db
-            .select()
-            .from(conversations)
-            .where(eq(conversations.matchId, matchId))
-            .limit(1)
+        const conversation = await Conversation.findOne({ matchId })
 
         if (conversation) {
             // Delete associated data
-            await db.delete(messages).where(eq(messages.conversationId, conversation.id))
-            await db.delete(conversationSummaries).where(eq(conversationSummaries.conversationId, conversation.id))
-            await db.delete(conversations).where(eq(conversations.id, conversation.id))
+            await Message.deleteMany({ conversationId: conversation._id })
+            await ConversationSummary.deleteMany({ conversationId: conversation._id })
+            await Conversation.findByIdAndDelete(conversation._id)
         }
 
-        await db.delete(matches).where(eq(matches.id, matchId))
+        await Match.findByIdAndDelete(matchId)
 
         return c.json({ success: true })
     })
 
 export { chatApp }
+

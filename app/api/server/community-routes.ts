@@ -1,6 +1,4 @@
-import { db } from '@/db'
-import { communities, communityMembers, learningGoals, users, matches } from '@/db/schema'
-import { and, eq, ne, sql, or } from 'drizzle-orm'
+import { User, Community, CommunityMember, LearningGoal, Match } from '@/db/schema'
 import { Hono } from 'hono'
 import { findMatches } from '@/lib/ai/matching-service'
 
@@ -12,7 +10,7 @@ type Variables = {
 // Main communities app
 const communitiesApp = new Hono<{ Variables: Variables }>()
   .get('/all', async c => {
-    const allCommu = await db.select().from(communities)
+    const allCommu = await Community.find()
     return c.json(allCommu)
   })
   .post('/', async c => {
@@ -28,52 +26,36 @@ const communitiesApp = new Hono<{ Variables: Variables }>()
 
     if (!name) return c.json({ error: 'Name is required' }, 400)
 
-    const [newCommunity] = await db.insert(communities).values({
+    const newCommunity = await Community.create({
       name,
       description,
       imageUrl,
-      createdById: userId
-    }).returning()
+      createdBy: userId
+    })
 
     // Auto-join the creator
-    await db.insert(communityMembers).values({
+    await CommunityMember.create({
       userId,
-      communityId: newCommunity.id
+      communityId: newCommunity._id
     })
 
     return c.json(newCommunity)
   })
   .get('/', async c => {
     const clerkID = c.get('userId')
-    const userCommunityes = await db
-      .select({
-        id: communities.id,
-        name: communities.name,
-        description: communities.description,
-        imageUrl: communities.imageUrl,
-        createdById: communities.createdById,
-        createdAt: communities.createdAt,
-        updatedAt: communities.updatedAt
-      })
-      .from(communityMembers)
-      .innerJoin(communities, eq(communityMembers.communityId, communities.id))
-      .where(eq(communityMembers.userId, clerkID))
+    const memberships = await CommunityMember.find({ userId: clerkID }).populate('communityId')
+    const userCommunityes = memberships.map(m => m.communityId)
 
     return c.json(userCommunityes)
   })
 
 // Nested app for specific community operations
-// This will be mounted at /:id
 const communityDetailApp = new Hono<{ Variables: Variables }>()
   .get('/', async c => {
     const id = c.req.param('id')
     if (!id) return c.json({ error: 'ID is missing' }, 400)
 
-    const [community] = await db
-      .select()
-      .from(communities)
-      .where(eq(communities.id, id))
-      .limit(1)
+    const community = await Community.findById(id)
 
     if (!community) {
       return c.json({ error: 'Community not found' }, 404)
@@ -88,27 +70,17 @@ const communityDetailApp = new Hono<{ Variables: Variables }>()
     if (!userId) return c.json({ error: 'Unauthorized' }, 401)
 
     // Verify community exists
-    if (!communityId) return c.json({ error: 'Community ID missing' }, 400)
-
-    // Verify community exists
-    const [community] = await db
-      .select()
-      .from(communities)
-      .where(eq(communities.id, communityId))
-      .limit(1)
+    const community = await Community.findById(communityId)
 
     if (!community) {
       return c.json({ error: 'Community not found' }, 404)
     }
 
-    await db
-      .insert(communityMembers)
-      // @ts-ignore - explicitly checking userId/communityId above but TS might still complain about undefined union
-      .values({
-        userId: userId as string,
-        communityId: communityId as string
-      })
-      .onConflictDoNothing()
+    await CommunityMember.updateOne(
+      { userId, communityId },
+      { $setOnInsert: { userId, communityId, joinedAt: new Date() } },
+      { upsert: true }
+    )
 
     return c.json({ message: 'Joined successfully' })
   })
@@ -117,16 +89,7 @@ const communityDetailApp = new Hono<{ Variables: Variables }>()
     const userId = c.get('userId')
     if (!communityId || !userId) return c.json({ isMember: false })
 
-    const [membership] = await db
-      .select()
-      .from(communityMembers)
-      .where(
-        and(
-          eq(communityMembers.communityId, communityId),
-          eq(communityMembers.userId, userId)
-        )
-      )
-      .limit(1)
+    const membership = await CommunityMember.findOne({ communityId, userId })
 
     return c.json({ isMember: !!membership })
   })
@@ -136,15 +99,7 @@ const communityDetailApp = new Hono<{ Variables: Variables }>()
 
     if (!communityId || !userId) return c.json({ error: 'Invalid request' }, 400)
 
-    const goals = await db
-      .select()
-      .from(learningGoals)
-      .where(
-        and(
-          eq(learningGoals.communityId, communityId),
-          eq(learningGoals.userId, userId)
-        )
-      )
+    const goals = await LearningGoal.find({ communityId, userId })
 
     return c.json(goals)
   })
@@ -156,11 +111,11 @@ const communityDetailApp = new Hono<{ Variables: Variables }>()
     if (!title) return c.json({ error: 'Title required' }, 400)
     if (!communityId || !userId) return c.json({ error: 'Invalid request' }, 400)
 
-    const [goal] = await db.insert(learningGoals).values({
-      userId: userId as string,
-      communityId: communityId as string,
+    const goal = await LearningGoal.create({
+      userId,
+      communityId,
       title
-    }).returning()
+    })
 
     return c.json(goal)
   })
@@ -168,16 +123,16 @@ const communityDetailApp = new Hono<{ Variables: Variables }>()
     const communityId = c.req.param('id')
     if (!communityId) return c.json({ error: 'Community ID missing' }, 400)
 
-    const members = await db
-      .select({
-        id: users.id,
-        name: users.name,
-        imageUrl: users.imageUrl,
-        joinedAt: communityMembers.joinedAt
-      })
-      .from(communityMembers)
-      .innerJoin(users, eq(communityMembers.userId, users.id))
-      .where(eq(communityMembers.communityId, communityId))
+    const memberships = await CommunityMember.find({ communityId }).populate('userId')
+    const members = memberships.map(m => {
+      const user = m.userId as any;
+      return {
+        id: user._id,
+        name: user.name,
+        imageUrl: user.imageUrl,
+        joinedAt: m.joinedAt
+      }
+    })
 
     return c.json(members)
   })
@@ -192,31 +147,25 @@ const communityDetailApp = new Hono<{ Variables: Variables }>()
     const [u1, u2] = [userId, targetUserId].sort()
 
     // Ensure order for user1Id < user2Id
-    const [existingMatch] = await db
-      .select()
-      .from(matches)
-      .where(
-        and(
-          eq(matches.communityId, communityId),
-          eq(matches.user1Id, u1),
-          eq(matches.user2Id, u2)
-        )
-      )
-      .limit(1)
+    const existingMatch = await Match.findOne({
+      communityId,
+      user1Id: u1,
+      user2Id: u2
+    })
 
     if (existingMatch) {
-      return c.json({ matchId: existingMatch.id })
+      return c.json({ matchId: existingMatch._id })
     }
 
     // Create a new match record
-    const [newMatch] = await db.insert(matches).values({
+    const newMatch = await Match.create({
       user1Id: u1,
       user2Id: u2,
       communityId: communityId,
       status: 'accepted'
-    }).returning()
+    })
 
-    return c.json({ matchId: newMatch.id })
+    return c.json({ matchId: newMatch._id })
   })
   .post('/match', async c => {
     const communityId = c.req.param('id')
@@ -225,40 +174,32 @@ const communityDetailApp = new Hono<{ Variables: Variables }>()
     if (!communityId || !userId) return c.json({ error: 'Invalid request' }, 400)
 
     // 1. Get current user profile & goals
-    const [currentUser] = await db
-      .select({
-        id: users.id,
-        name: users.name,
-        goals: sql<string[]>`array_agg(${learningGoals.title})`
-      })
-      .from(users)
-      .leftJoin(learningGoals, eq(learningGoals.userId, users.id))
-      .where(eq(users.id, userId))
-      .groupBy(users.id)
+    const currentUserDoc = await User.findById(userId)
+    const currentUserGoals = await LearningGoal.find({ userId })
 
-    // 2. Get candidates in the same community (excluding current user)
-    const candidates = await db
-      .select({
-        id: users.id,
-        name: users.name,
-        goals: sql<string[]>`array_agg(${learningGoals.title})`
-      })
-      .from(users)
-      .innerJoin(communityMembers, eq(communityMembers.userId, users.id))
-      .leftJoin(learningGoals, eq(learningGoals.userId, users.id))
-      .where(
-        and(
-          eq(communityMembers.communityId, communityId),
-          ne(users.id, userId)
-        )
-      )
-      .groupBy(users.id)
-
-    if (!currentUser || candidates.length === 0) {
-      return c.json({ matches: [] })
+    const currentUser = {
+      id: currentUserDoc?._id,
+      name: currentUserDoc?.name,
+      goals: currentUserGoals.map(g => g.title)
     }
 
-    if (!communityId) return c.json({ error: 'Community ID missing' }, 400)
+    // 2. Get candidates in the same community (excluding current user)
+    const memberships = await CommunityMember.find({ communityId, userId: { $ne: userId } }).populate('userId')
+
+    // This is inefficient but works for now to translate SQL behavior
+    const candidates = await Promise.all(memberships.map(async (m) => {
+      const user = m.userId as any;
+      const goals = await LearningGoal.find({ userId: user._id })
+      return {
+        id: user._id,
+        name: user.name,
+        goals: goals.map(g => g.title)
+      }
+    }))
+
+    if (!currentUser.id || candidates.length === 0) {
+      return c.json({ matches: [] })
+    }
 
     // 3. Call AI Service
     const aiMatches = await findMatches(
@@ -271,31 +212,13 @@ const communityDetailApp = new Hono<{ Variables: Variables }>()
       if (match.matchScore >= 70) {
         const [u1, u2] = [userId, match.userId].sort()
 
-        const [inserted] = await db.insert(matches).values({
-          user1Id: u1,
-          user2Id: u2,
-          communityId: communityId as string,
-          status: 'pending'
-        })
-          .onConflictDoUpdate({
-            target: [matches.user1Id, matches.user2Id, matches.communityId],
-            set: { status: 'pending' }
-          })
-          .returning()
+        const matchRecord = await Match.findOneAndUpdate(
+          { user1Id: u1, user2Id: u2, communityId },
+          { status: 'pending' },
+          { upsert: true, new: true }
+        )
 
-        let matchId = inserted?.id
-        if (!matchId) {
-          const [existing] = await db.select().from(matches).where(
-            and(
-              eq(matches.user1Id, u1),
-              eq(matches.user2Id, u2),
-              eq(matches.communityId, communityId)
-            )
-          ).limit(1)
-          matchId = existing?.id
-        }
-
-        return { ...match, matchId }
+        return { ...match, matchId: matchRecord._id }
       }
       return { ...match, matchId: null }
     }))
@@ -304,7 +227,6 @@ const communityDetailApp = new Hono<{ Variables: Variables }>()
   })
 
 // Mount the nested app
-// IMPORTANT: The path parameter must be consistent. Hono uses the route path for client types.
 communitiesApp.route('/:id', communityDetailApp)
 
 export { communitiesApp }

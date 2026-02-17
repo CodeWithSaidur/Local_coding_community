@@ -1,181 +1,87 @@
-import { relations } from "drizzle-orm";
-import { jsonb, pgTable, text, timestamp, uuid, uniqueIndex } from "drizzle-orm/pg-core";
+import mongoose, { Schema, Document } from "mongoose";
 
-export const users = pgTable("users", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  clerkId: text("clerk_id").notNull().unique(),
-  email: text("email").notNull(),
-  name: text("name").notNull(),
-  imageUrl: text("image_url"),
-  subscriptionTier: text("subscription_tier").default("free").notNull(), // free, pro
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+// --- Users ---
+const userSchema = new Schema({
+  clerkId: { type: String, required: true, unique: true },
+  email: { type: String, required: true },
+  name: { type: String, required: true },
+  imageUrl: { type: String },
+  subscriptionTier: { type: String, default: "free", required: true },
+}, { timestamps: true });
+
+export const User = mongoose.models.User || mongoose.model("User", userSchema);
+
+// --- Communities ---
+const communitySchema = new Schema({
+  name: { type: String, required: true },
+  description: { type: String },
+  imageUrl: { type: String },
+  createdBy: { type: Schema.Types.ObjectId, ref: "User" },
+}, { timestamps: true });
+
+export const Community = mongoose.models.Community || mongoose.model("Community", communitySchema);
+
+// --- Community Members ---
+const communityMemberSchema = new Schema({
+  userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+  communityId: { type: Schema.Types.ObjectId, ref: "Community", required: true },
+  joinedAt: { type: Date, default: Date.now },
 });
 
-export const communities = pgTable("communities", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  name: text("name").notNull(),
-  description: text("description"),
-  imageUrl: text("image_url"),
-  createdById: uuid("created_by_id").references(() => users.id),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+export const CommunityMember = mongoose.models.CommunityMember || mongoose.model("CommunityMember", communityMemberSchema);
+
+// --- Learning Goals ---
+const learningGoalSchema = new Schema({
+  userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+  communityId: { type: Schema.Types.ObjectId, ref: "Community", required: true },
+  title: { type: String, required: true },
+  description: { type: String },
+  tags: { type: [String], default: [] },
+}, { timestamps: true });
+
+export const LearningGoal = mongoose.models.LearningGoal || mongoose.model("LearningGoal", learningGoalSchema);
+
+// --- Matches ---
+const matchSchema = new Schema({
+  user1Id: { type: Schema.Types.ObjectId, ref: "User", required: true },
+  user2Id: { type: Schema.Types.ObjectId, ref: "User", required: true },
+  communityId: { type: Schema.Types.ObjectId, ref: "Community", required: true },
+  status: { type: String, default: "pending", required: true }, // pending, accepted, declined
+}, { timestamps: true });
+
+matchSchema.index({ user1Id: 1, user2Id: 1, communityId: 1 }, { unique: true });
+
+export const Match = mongoose.models.Match || mongoose.model("Match", matchSchema);
+
+// --- Conversations ---
+const conversationSchema = new Schema({
+  matchId: { type: Schema.Types.ObjectId, ref: "Match", required: true },
+  lastMessageAt: { type: Date },
+}, { timestamps: true });
+
+export const Conversation = mongoose.models.Conversation || mongoose.model("Conversation", conversationSchema);
+
+// --- Messages ---
+const messageSchema = new Schema({
+  conversationId: { type: Schema.Types.ObjectId, ref: "Conversation", required: true },
+  senderId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+  content: { type: String, required: true },
+}, { timestamps: true });
+
+export const Message = mongoose.models.Message || mongoose.model("Message", messageSchema);
+
+// --- Conversation Summaries ---
+const conversationSummarySchema = new Schema({
+  conversationId: { type: Schema.Types.ObjectId, ref: "Conversation", required: true },
+  summary: { type: String, required: true },
+  actionItems: { type: [String], default: [] },
+  keyPoints: { type: [String], default: [] },
+  nextSteps: { type: [String], default: [] },
+  generatedAt: { type: Date, default: Date.now },
 });
 
-export const communityMembers = pgTable("community_members", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  userId: uuid("user_id")
-    .references(() => users.id)
-    .notNull(),
-  communityId: uuid("community_id")
-    .references(() => communities.id)
-    .notNull(),
-  joinedAt: timestamp("joined_at").defaultNow().notNull(),
-});
+export const ConversationSummary = mongoose.models.ConversationSummary || mongoose.model("ConversationSummary", conversationSummarySchema);
 
-export const learningGoals = pgTable("learning_goals", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  userId: uuid("user_id")
-    .references(() => users.id)
-    .notNull(),
-  communityId: uuid("community_id")
-    .references(() => communities.id)
-    .notNull(),
-  title: text("title").notNull(),
-  description: text("description"),
-  tags: jsonb("tags").$type<string[]>().default([]).notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-
-export const matches = pgTable("matches", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  user1Id: uuid("user1_id")
-    .references(() => users.id)
-    .notNull(),
-  user2Id: uuid("user2_id")
-    .references(() => users.id)
-    .notNull(),
-  communityId: uuid("community_id")
-    .references(() => communities.id)
-    .notNull(),
-  status: text("status").default("pending").notNull(), // pending, accepted, declined
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-}, (table) => {
-  return {
-    uniqueMatch: uniqueIndex("unique_match_idx").on(table.user1Id, table.user2Id, table.communityId),
-  }
-});
-
-export const conversations = pgTable("conversations", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  matchId: uuid("match_id")
-    .references(() => matches.id)
-    .notNull(),
-  lastMessageAt: timestamp("last_message_at"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
-export const messages = pgTable("messages", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  conversationId: uuid("conversation_id")
-    .references(() => conversations.id)
-    .notNull(),
-  senderId: uuid("sender_id")
-    .references(() => users.id)
-    .notNull(),
-  content: text("content").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
-export const conversationSummaries = pgTable("conversation_summaries", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  conversationId: uuid("conversation_id")
-    .references(() => conversations.id)
-    .notNull(),
-  summary: text("summary").notNull(),
-  actionItems: jsonb("action_items").$type<string[]>().default([]).notNull(),
-  keyPoints: jsonb("key_points").$type<string[]>().default([]).notNull(),
-  nextSteps: jsonb("next_steps").$type<string[]>().default([]).notNull(),
-  generatedAt: timestamp("generated_at").defaultNow().notNull(),
-});
-
-// Relations
-export const usersRelations = relations(users, ({ many }) => ({
-  learningGoals: many(learningGoals),
-  communityMemberships: many(communityMembers),
-  sentMessages: many(messages),
-}));
-
-export const communitiesRelations = relations(communities, ({ one, many }) => ({
-  createdBy: one(users, {
-    fields: [communities.createdById],
-    references: [users.id],
-  }),
-  members: many(communityMembers),
-  learningGoals: many(learningGoals),
-  matches: many(matches),
-}));
-
-export const learningGoalsRelations = relations(learningGoals, ({ one }) => ({
-  user: one(users, {
-    fields: [learningGoals.userId],
-    references: [users.id],
-  }),
-  community: one(communities, {
-    fields: [learningGoals.communityId],
-    references: [communities.id],
-  }),
-}));
-
-export const matchesRelations = relations(matches, ({ one, many }) => ({
-  user1: one(users, {
-    fields: [matches.user1Id],
-    references: [users.id],
-  }),
-  user2: one(users, {
-    fields: [matches.user2Id],
-    references: [users.id],
-  }),
-  community: one(communities, {
-    fields: [matches.communityId],
-    references: [communities.id],
-  }),
-  conversation: many(conversations),
-}));
-
-export const conversationsRelations = relations(
-  conversations,
-  ({ one, many }) => ({
-    match: one(matches, {
-      fields: [conversations.matchId],
-      references: [matches.id],
-    }),
-    messages: many(messages),
-    summaries: many(conversationSummaries),
-  })
-);
-
-export const messagesRelations = relations(messages, ({ one }) => ({
-  conversation: one(conversations, {
-    fields: [messages.conversationId],
-    references: [conversations.id],
-  }),
-  sender: one(users, {
-    fields: [messages.senderId],
-    references: [users.id],
-  }),
-}));
-
-export const conversationSummariesRelations = relations(
-  conversationSummaries,
-  ({ one }) => ({
-    conversation: one(conversations, {
-      fields: [conversationSummaries.conversationId],
-      references: [conversations.id],
-    }),
-  })
-);
 
 
 // 1. npx drizzle-kit push
